@@ -17,6 +17,8 @@
 
 #include "path.h"
 
+#include <optional>
+
 class Coordinator;
 
 class FileHashTask {
@@ -73,6 +75,9 @@ class FileHashTask {
 
   uint64_t _file_size{};
   uint64_t _current_offset{};
+
+  // Last write time of the source, in seconds since the Unix epoch. This is the time exports should record for the file
+  std::optional<int64_t> _source_time;
 
   uint64_t _file_index;
   uint32_t _volume_serial;
@@ -136,6 +141,10 @@ public:
   DWORD GetError() const { return _error; }
 
   uint64_t GetSize() const { return _file_size; }
+
+  // Timestamp of the source file, if it could be determined. Exports fall back to the time of the operation when this
+  // is empty, so it is never a made up value.
+  const std::optional<int64_t>& GetSourceTime() const { return _source_time; }
 
   HANDLE GetHandle() const { return _handle; }
 

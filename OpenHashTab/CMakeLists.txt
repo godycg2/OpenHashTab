@@ -81,3 +81,10 @@ add_subdirectory(Benchmark)
 add_subdirectory(OpenHashTab)
 
 add_subdirectory(StandaloneStub)
+
+option(OHT_BUILD_TESTS "Build the OpenHashTab regression tests" ON)
+
+if(OHT_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(Tests)
+endif()

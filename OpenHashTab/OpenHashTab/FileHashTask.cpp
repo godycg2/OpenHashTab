@@ -16,6 +16,7 @@
 #include "FileHashTask.h"
 
 #include "Coordinator.h"
+#include "ExportFormat.h"
 #include "Queues.h"
 #include "utl.h"
 
@@ -122,6 +123,12 @@ FileHashTask::FileHashTask(Coordinator* prop_page, const std::wstring& path, Pro
 
   _file_size = static_cast<uint64_t>(fi.nFileSizeHigh) << 32 | fi.nFileSizeLow;
   _file_index = static_cast<uint64_t>(fi.nFileIndexHigh) << 32 | fi.nFileIndexLow;
+
+  // The time exports record for this file. Read once here, while the handle is open, so the value cannot change
+  // between hashing and the user copying or exporting the results.
+  _source_time = exportformat::FileTimeToUnixSeconds(
+    (static_cast<uint64_t>(fi.ftLastWriteTime.dwHighDateTime) << 32) | fi.ftLastWriteTime.dwLowDateTime
+  );
 
   // TODO: use this in queue so a lot of files from a slower device can't slow down another faster device
   _volume_serial = fi.dwVolumeSerialNumber;
