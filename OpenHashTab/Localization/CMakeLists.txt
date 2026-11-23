@@ -63,7 +63,13 @@ function(lang_json_to_include JSON DEFAULT_JSON OUT_VAR)
     set(${OUT_VAR} "${RESULT}" PARENT_SCOPE)
 endfunction()
 
-file(GLOB LOCALES CONFIGURE_DEPENDS $OHT_LOCALES_DIR/*.json)
+# The pattern has to be quoted: with CONFIGURE_DEPENDS, newer CMake (4.x) evaluates an unquoted ${OHT_LOCALES_DIR}
+# in a scope where the variable is gone, finds no files, and silently builds the extension without any string table.
+file(GLOB LOCALES CONFIGURE_DEPENDS "${OHT_LOCALES_DIR}/*.json")
+
+if (NOT LOCALES)
+    message(FATAL_ERROR "No locale definitions found in '${OHT_LOCALES_DIR}': the build would produce an UI with no text at all.")
+endif ()
 
 # TODO: Since we're using the undocumented RtlGetString, maybe the defaulting could be moved into code.
 file(READ "${OHT_LOCALES_DIR}/en-us.json" DEFAULT_LOCALE_JSON)
