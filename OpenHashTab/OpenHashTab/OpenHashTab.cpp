@@ -15,6 +15,7 @@
 //    along with OpenHashTab.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "Coordinator.h"
+#include "DelayLoad.h"
 #include "MainDialog.h"
 #include "utl.h"
 
@@ -349,5 +350,11 @@ EXTERN_C BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved);
 
 EXTERN_C BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved) {
   UNREFERENCED_PARAMETER(instance);
+
+  // The algorithm DLLs are delay loaded by bare name, so without this the host process has to have our directory in
+  // its search path. Explorer does not, and a failed delay load takes it down with 0xC06D007E.
+  if (reason == DLL_PROCESS_ATTACH)
+    delayload::InstallAlgorithmHook();
+
   return _AtlModule.DllMain(reason, reserved);
 }
