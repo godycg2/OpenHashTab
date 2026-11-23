@@ -63,9 +63,13 @@ function(lang_json_to_include JSON DEFAULT_JSON OUT_VAR)
     set(${OUT_VAR} "${RESULT}" PARENT_SCOPE)
 endfunction()
 
-# The pattern has to be quoted: with CONFIGURE_DEPENDS, newer CMake (4.x) evaluates an unquoted ${OHT_LOCALES_DIR}
-# in a scope where the variable is gone, finds no files, and silently builds the extension without any string table.
-file(GLOB LOCALES CONFIGURE_DEPENDS "${OHT_LOCALES_DIR}/*.json")
+# The pattern has to be quoted: with CONFIGURE_DEPENDS, newer CMake (4.x) evaluates an unquoted ${OHT_LOCALES_DIR} in a
+# scope where the variable is gone, finds no files, and silently builds the extension without any string table.
+#
+# No CONFIGURE_DEPENDS either: it makes CMake emit a VerifyGlobs.cmake step that is executed on every build, and that
+# step fails on some CMake versions for this glob outside the source tree. The list only has to be right when the
+# project is configured, so pick up new locales by reconfiguring.
+file(GLOB LOCALES "${OHT_LOCALES_DIR}/*.json")
 
 if (NOT LOCALES)
     message(FATAL_ERROR "No locale definitions found in '${OHT_LOCALES_DIR}': the build would produce an UI with no text at all.")
