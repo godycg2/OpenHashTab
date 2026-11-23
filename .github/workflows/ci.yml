@@ -6,6 +6,7 @@ on:
       - "*.*.*"
     branches:
       - "*"
+  workflow_dispatch:
 
 jobs:
   build:
@@ -58,6 +59,20 @@ jobs:
         run: |
           cd ${{ github.workspace }}
           .\build_all.ps1
+
+      # Covers the export / clipboard timestamp regression. Exits non-zero on failure, which fails the job.
+      - name: Run regression tests
+        shell: pwsh
+        run: |
+          ctest --test-dir build/oht-x64 --output-on-failure 2>&1 | Tee-Object -FilePath build/oht-x64/ctest.log
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: test-log
+          path: .\build\oht-x64\ctest.log
+          if-no-files-found: warn
 
       - name: Upload installers
         uses: actions/upload-artifact@v5
