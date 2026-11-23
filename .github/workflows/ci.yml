@@ -32,34 +32,35 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/select-clang.ps1
 
-      - name: Figure out if we're running for a tag
+      - name: Figure out the version
         id: checktag
         run: |
           cd ${{ github.workspace }}
-          If($Env:GITHUB_REF -match "([0-9]+)\.([0-9]+)\.([0-9]+)") {
-              $IsRelease = "yes";
-              $Version = $Matches[0];
+          # Tag builds take the version from the tag, everything else from the closest tag plus the commit distance
+          If ($Env:GITHUB_REF -match "refs/tags/(.+)$") {
+              $Version = $Matches[1];
+          } Else {
+              $Version = (git describe --dirty --broken --always 2>$null);
+          }
+          If ($Version -match "v?([0-9]+)\.([0-9]+)\.([0-9]+)") {
               $VersionMajor = $Matches[1];
               $VersionMinor = $Matches[2];
               $VersionPatch = $Matches[3];
           } Else {
-              $IsRelease = "no";
-              $Version = (git describe --dirty --broken --always);
-              If($Version -match "([0-9]*)\.([0-9]*)\.([0-9]*)-.*") {
-                  $VersionMajor = $Matches[1];
-                  $VersionMinor = $Matches[2];
-                  $VersionPatch = $Matches[3];
-              } Else {
-                  $VersionMajor = 0;
-                  $VersionMinor = 0;
-                  $VersionPatch = 0;
-              }
+              # Nothing to derive a version from, and an installer without one is worse than a date based one
+              $Version = (Get-Date -Format "yyyy.MM.dd");
+              Write-Host "::warning::No version tag reachable, using the date as the version: $Version";
+              $VersionMajor, $VersionMinor, $VersionPatch = $Version -split '\.';
           }
-          Echo ("is_release=" + $IsRelease) >> $Env:GITHUB_OUTPUT;
           Echo ("version=" + $Version) >> $Env:GITHUB_OUTPUT;
           Echo ("version_major=" + $VersionMajor) >> $Env:GITHUB_OUTPUT;
           Echo ("version_minor=" + $VersionMinor) >> $Env:GITHUB_OUTPUT;
           Echo ("version_patch=" + $VersionPatch) >> $Env:GITHUB_OUTPUT;
+          # build_all.ps1 takes the version from the environment; without these the installer ends up as 0.0.0
+          Echo ("CI_VERSION=" + $Version) >> $Env:GITHUB_ENV;
+          Echo ("CI_VERSION_MAJOR=" + $VersionMajor) >> $Env:GITHUB_ENV;
+          Echo ("CI_VERSION_MINOR=" + $VersionMinor) >> $Env:GITHUB_ENV;
+          Echo ("CI_VERSION_PATCH=" + $VersionPatch) >> $Env:GITHUB_ENV;
 
       - name: Build all
         run: |
