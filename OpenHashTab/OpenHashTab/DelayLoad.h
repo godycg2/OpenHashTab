@@ -16,7 +16,10 @@
 #pragma once
 
 namespace delayload {
-  // Makes the delay loaded AlgorithmsDll_*.dll resolve from this module's own directory instead of the search path of
-  // the process that loaded us. Has to run before the first call into an algorithm.
-  void InstallAlgorithmHook();
+  // Loads the delay loaded AlgorithmsDll_*.dll from this module's own directory, so they resolve no matter what the
+  // search path of the process that loaded us looks like. Has to run before the first call into an algorithm, and is
+  // safe to call more than once.
+  //
+  // Not called from DllMain: loading a module while holding the loader lock can deadlock.
+  void PreloadAlgorithmDlls();
 } // namespace delayload

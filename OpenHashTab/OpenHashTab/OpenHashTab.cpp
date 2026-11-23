@@ -111,7 +111,12 @@ public:
 
   DECLARE_PROTECT_FINAL_CONSTRUCT()
 
-  HRESULT FinalConstruct() { return S_OK; }
+  HRESULT FinalConstruct() {
+    // First point in the object lifetime that is not under the loader lock, and still before anything can touch an
+    // algorithm. The algorithm DLLs are delay loaded by bare name, which does not work in Explorer.
+    delayload::PreloadAlgorithmDlls();
+    return S_OK;
+  }
 
   void FinalRelease();
 };
@@ -350,11 +355,5 @@ EXTERN_C BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved);
 
 EXTERN_C BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved) {
   UNREFERENCED_PARAMETER(instance);
-
-  // The algorithm DLLs are delay loaded by bare name, so without this the host process has to have our directory in
-  // its search path. Explorer does not, and a failed delay load takes it down with 0xC06D007E.
-  if (reason == DLL_PROCESS_ATTACH)
-    delayload::InstallAlgorithmHook();
-
   return _AtlModule.DllMain(reason, reserved);
 }

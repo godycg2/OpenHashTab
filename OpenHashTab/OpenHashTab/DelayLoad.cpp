@@ -15,25 +15,25 @@
 //    along with OpenHashTab.  If not, see <https://www.gnu.org/licenses/>.
 #include "DelayLoad.h"
 
-#include <delayimp.h>
-
-#include <cstring>
 #include <string>
-#include <string_view>
 
 namespace delayload {
 
   namespace {
 
-    FARPROC WINAPI DelayLoadNotify(unsigned notify, PDelayLoadInfo info);
+    // The algorithm DLLs are delay loaded by bare name, so the delay load helper resolves them through the search path of
+    // whatever process loaded us. In Explorer that is C:\Windows and friends, never our installation directory, and a
+    // failed delay load surfaces as 0xC06D007E, which Explorer cannot survive.
+    //
+    // Loading them ourselves by full path fixes that without touching the process: a later bare name lookup finds the
+    // already loaded module by its base name and does not search at all.
 
-    // Full path of this DLL, so the algorithm DLLs can be loaded from next to it. Resolved through our own code address
-    // so it works no matter how or from where the shell loaded us.
+    // Full path of this DLL, resolved through our own code address so it works no matter how we were loaded.
     std::wstring GetOwnPath() {
       HMODULE module = nullptr;
       if (!GetModuleHandleExW(
             GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            reinterpret_cast<LPCWSTR>(&DelayLoadNotify),
+            reinterpret_cast<LPCWSTR>(&GetOwnPath),
             &module
           ))
         return {};
@@ -45,68 +45,56 @@ namespace delayload {
           return {};
         if (len < buffer.size()) {
           buffer.resize(len);
-          return buffer;
+          break;
         }
         buffer.resize(buffer.size() * 2);
       }
+
+      return buffer;
     }
 
-    std::wstring GetOwnDirectory() {
-      auto path = GetOwnPath();
-      if (path.empty())
-        return {};
-
+    // Directory part of a path, trailing slash included, or empty if there is no directory part
+    std::wstring GetDirectoryOf(const std::wstring& path) {
       const auto slash = path.rfind(L'\\');
       if (slash == std::wstring::npos)
         return {};
 
-      path.resize(slash + 1);
-      return path;
+      return path.substr(0, slash + 1);
     }
 
-    std::wstring Utf8ToWide(const char* str) {
-      const auto len = static_cast<int>(strlen(str));
-      if (len <= 0)
-        return {};
+    bool Preload(const std::wstring& directory) {
+      // Every flavor this build produced, no need to know which one the code is going to pick
+      const auto pattern = directory + L"AlgorithmsDll_*.dll";
+      WIN32_FIND_DATAW find{};
+      const auto handle = FindFirstFileW(pattern.c_str(), &find);
+      if (handle == INVALID_HANDLE_VALUE)
+        return false;
 
-      const auto size = MultiByteToWideChar(CP_UTF8, 0, str, len, nullptr, 0);
-      if (size <= 0)
-        return {};
+      do {
+        if (find.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+          continue;
+        // The reference is deliberately kept: the module has to stay loaded for the delay load helper to find it
+        LoadLibraryW((directory + find.cFileName).c_str());
+      } while (FindNextFileW(handle, &find) != 0);
 
-      std::wstring out(static_cast<size_t>(size), L'\0');
-      if (MultiByteToWideChar(CP_UTF8, 0, str, len, out.data(), size) != size)
-        return {};
-
-      return out;
+      FindClose(handle);
+      return true;
     }
 
-    FARPROC WINAPI DelayLoadNotify(unsigned notify, PDelayLoadInfo info) {
-      if (notify != dliNotePreLoadLibrary || !info || !info->szDll)
-        return nullptr;
-
-      // Only our own algorithm DLLs are shipped next to us, everything else (winhttp) is a system module
-      constexpr std::string_view k_algorithm_prefix = "AlgorithmsDll_";
-      if (std::string_view{info->szDll}.rfind(k_algorithm_prefix, 0) != 0)
-        return nullptr;
-
-      // Both are constant for the lifetime of the module
-      static const auto directory = GetOwnDirectory();
+    bool PreloadOnce() {
+      const auto directory = GetDirectoryOf(GetOwnPath());
       if (directory.empty())
-        return nullptr;
+        return false;
 
-      const auto dll_name = Utf8ToWide(info->szDll);
-      if (dll_name.empty())
-        return nullptr;
-
-      return reinterpret_cast<FARPROC>(LoadLibraryW((directory + dll_name).c_str()));
+      return Preload(directory);
     }
 
   } // namespace
 
-  void InstallAlgorithmHook() {
-    // delayimp.lib owns this pointer, and every module that links it gets its own copy, so this only affects our own
-    // delay loaded imports.
-    __pfnDliNotifyHook2 = &DelayLoadNotify;
+  void PreloadAlgorithmDlls() {
+    // A bool has no destructor, so this does not give the DLL an exit time destructor
+    static const bool once = PreloadOnce();
+    (void)once;
   }
 
 } // namespace delayload
